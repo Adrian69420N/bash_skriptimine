@@ -15,14 +15,37 @@ if id "$KASUTAJANIMI" &>/dev/null; then
   exit 1
 fi
 
-# Loome kasutaja koos kodukataloogiga
-sudo useradd -m -d /home/$KASUTAJANIMI $KASUTAJANIMI
+# Küsime ja määrame kasutajale parooli
+echo "Sisesta parool kasutajale '$KASUTAJANIMI':"
+read -s PAROOL1
+echo "Sisesta parool uuesti:"
+read -s PAROOL2
+
+# Kontrollime, kas paroolid kattuvad
+if [ "$PAROOL1" != "$PAROOL2" ]; then
+  echo "Paroolid ei kattu. Proovi uuesti."
+  exit 1
+fi
+
+# Loome kasutaja koos kodukataloogiga ja määrame vaikimisi shelliks /bin/bash
+sudo useradd -m -d /home/$KASUTAJANIMI -s /bin/bash $KASUTAJANIMI
 
 # Kontrollime, kas kasutaja loodi edukalt
 if [ $? -eq 0 ]; then
   echo "Kasutaja '$KASUTAJANIMI' loodi edukalt."
 else
   echo "Kasutaja loomine ebaõnnestus."
+  exit 1
+fi
+
+# Määrame kasutajale parooli
+echo "$KASUTAJANIMI:$PAROOL1" | sudo chpasswd
+
+# Kontrollime, kas parool määrati edukalt
+if [ $? -eq 0 ]; then
+  echo "Parool määrati edukalt."
+else
+  echo "Parooli määramine ebaõnnestus."
   exit 1
 fi
 
