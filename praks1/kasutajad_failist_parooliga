@@ -1,0 +1,29 @@
+#!/bin/bash
+# Skript loeb kasutajanime ja parooli failist ning lisab kasutaja koos parooliga süsteemi
+# Kontrollime, kas sisendfail on antud
+if [ $# -eq 0 ]; then
+    echo "Viga: kasutajate ja paroolide fail on puudu."
+    echo "Kasutamine: $0 <kasutajate_paroolide_fail>"
+    exit 1
+fi
+
+fail="$1"
+
+# Kontrollime, kas fail on loetav
+if [ ! -r "$fail" ]; then
+    echo "Viga: fail '$fail' ei ole loetav."
+    exit 2
+fi
+
+# Loome kasutajad koos paroolidega failist
+while IFS=: read -r kasutaja parool; do
+    if [ -n "$kasutaja" ] && [ -n "$parool" ]; then
+        # Käivitame lisa_kasutaja.sh skripti otse kasutaja loomiseks
+        ./lisa_kasutaja "$kasutaja"
+        # Lisame parooli kasutajale
+        echo "$kasutaja:$parool" | chpasswd
+        echo "Kasutajale '$kasutaja' määrati parool."
+    else
+        echo "Hoiatus: puudulik kirje vahele jäetud."
+    fi
+done < "$fail"

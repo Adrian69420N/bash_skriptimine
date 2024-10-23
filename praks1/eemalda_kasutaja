@@ -1,0 +1,62 @@
+#!/bin/bash
+
+# Funktsioon, mis kuvab kasutajate nimekirja koos loomise kuupäevadega
+show_users() {
+    echo "Kasutajate nimekiri ja loomise kuupäevad:"
+    echo "-----------------------------------------"
+    awk -F: '{ print $1, "\t", strftime("%Y-%m-%d %H:%M:%S", $3) }' /etc/passwd
+}
+
+# Funktsioon, mis lõpetab kasutaja protsessid
+stop_user_processes() {
+    local user="$1"
+    # Otsi ja lõpeta kõik kasutaja protsessid
+    for pid in $(pgrep -u "$user"); do
+        echo "Lõpetame protsessi: $pid (Kasutaja: $user)"
+        sudo kill -9 "$pid"
+    done
+}
+
+# Funktsioon, mis kustutab valitud kasutaja
+delete_user() {
+    read -p "Sisesta kustutatava kasutaja nimi: " user
+    if id "$user" &>/dev/null; then
+        # Lõpeta kasutaja protsessid
+        stop_user_processes "$user"
+
+        # Proovime kustutada mail spool, kui see on olemas
+        if [ -f /var/mail/"$user" ]; then
+            sudo rm /var/mail/"$user"  # Eemaldage mail spool
+        fi
+        
+        sudo userdel -r "$user"  # Kustuta kasutaja koos kodu kataloogiga
+        echo "Kasutaja $user on kustutatud."
+    else
+        echo "Kasutajat $user ei leitud."
+    fi
+}
+
+# Peamine skripti loogika
+while true; do
+    clear
+    show_users
+    echo
+    echo "Vali toiming:"
+    echo "1) Kustuta kasutaja"
+    echo "2) Välju"
+    read -p "Valik: " choice
+
+    case $choice in
+        1)
+            delete_user
+            read -p "Press any key to continue..."
+            ;;
+        2)
+            exit 0
+            ;;
+        *)
+            echo "Vale valik, proovi uuesti."
+            read -p "Press any key to continue..."
+            ;;
+    esac
+done
