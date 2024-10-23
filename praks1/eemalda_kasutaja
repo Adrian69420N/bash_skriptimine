@@ -10,17 +10,40 @@ show_users() {
 # Funktsioon, mis lõpetab kasutaja protsessid
 stop_user_processes() {
     local user="$1"
-    # Otsi ja lõpeta kõik kasutaja protsessid
-    for pid in $(pgrep -u "$user"); do
-        echo "Lõpetame protsessi: $pid (Kasutaja: $user)"
-        sudo kill -9 "$pid"
-    done
+    local pids=($(pgrep -u "$user"))
+    
+    if [ ${#pids[@]} -eq 0 ]; then
+        echo "Kasutajal $user ei ole aktiivseid protsesse."
+    else
+        echo "Lõpetame järgmised protsessid kasutajalt $user:"
+        for pid in "${pids[@]}"; do
+            echo "- Protsess ID: $pid"
+        done
+        # Küsime kasutajalt kinnitust protsesside lõpetamiseks
+        read -p "Kas soovite lõpetada need protsessid? (y/n): " confirm
+        if [[ "$confirm" =~ ^[Yy]$ ]]; then
+            for pid in "${pids[@]}"; do
+                sudo kill -9 "$pid"
+                echo "Protsess $pid on lõpetatud."
+            done
+        else
+            echo "Protsesside lõpetamine tühistatud."
+        fi
+    fi
 }
 
 # Funktsioon, mis kustutab valitud kasutaja
 delete_user() {
     read -p "Sisesta kustutatava kasutaja nimi: " user
+
+    # Kontrolli, kas kasutaja eksisteerib
     if id "$user" &>/dev/null; then
+        # Kontrolli, et kasutaja ei ole root
+        if [ "$user" == "root" ]; then
+            echo "Kasutaja 'root' ei saa kustutada. Operatsioon peatatud."
+            return
+        fi
+
         # Lõpeta kasutaja protsessid
         stop_user_processes "$user"
 
@@ -29,8 +52,14 @@ delete_user() {
             sudo rm /var/mail/"$user"  # Eemaldage mail spool
         fi
         
-        sudo userdel -r "$user"  # Kustuta kasutaja koos kodu kataloogiga
-        echo "Kasutaja $user on kustutatud."
+        # Küsime kinnitust kasutaja kustutamiseks
+        read -p "Kas olete kindel, et soovite kustutada kasutaja $user? (y/n): " confirm
+        if [[ "$confirm" =~ ^[Yy]$ ]]; then
+            sudo userdel -r "$user"  # Kustuta kasutaja koos kodu kataloogiga
+            echo "Kasutaja $user on kustutatud."
+        else
+            echo "Kasutaja $user kustutamine tühistatud."
+        fi
     else
         echo "Kasutajat $user ei leitud."
     fi
