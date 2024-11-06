@@ -1,57 +1,48 @@
 #!/bin/bash
 
-# MySQL version and repository configuration
-MYSQL_VERSION="9.1"
-REPO_PACKAGE="mysql-apt-config_0.8.15-1_all.deb"
-MYSQL_URL="https://dev.mysql.com/get/$REPO_PACKAGE"
-
-# Check for root privileges
-if [ "$EUID" -ne 0 ]; then
-  echo "Please run as root"
-  exit
-fi
-
-# Update the package list and install prerequisites
-echo "Updating package list and installing prerequisites..."
-sudo apt update
-sudo apt install -y wget gnupg
-
-# Download and install MySQL APT configuration package
-echo "Downloading MySQL APT configuration package..."
-wget $MYSQL_URL -O /tmp/$REPO_PACKAGE
-
-echo "Installing MySQL APT configuration package..."
-sudo dpkg -i /tmp/$REPO_PACKAGE
-
-# Fix repository key issue if it occurs
-echo "Updating package list..."
-if ! sudo apt update; then
-  echo "Fixing repository key issue..."
-  sudo apt-key list
-  sudo apt-key del A4A9 4068 76FC BD3C 4567 70C8 8C71 8D3B 5072 E1F5
-  sudo apt-key adv --keyserver pgp.mit.edu --recv-keys 467B942D3A79BD29
-  sudo apt update
-fi
-
-# Install MySQL server
-echo "Installing MySQL Server $MYSQL_VERSION..."
-sudo apt install -y mysql-server
-
-# Confirm successful installation
-if dpkg -l | grep -q mysql-server; then
-  echo "MySQL Server $MYSQL_VERSION successfully installed."
-else
-  echo "MySQL installation failed."
+# Kontrollib, kas skript käivitatakse root-õigustega
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Palun käivita see skript root kasutajana."
   exit 1
 fi
 
-# Optional: set up a .my.cnf configuration file with a predefined password (for automation)
-MYSQL_ROOT_PASSWORD="qwerty"
-echo "Setting up .my.cnf file for MySQL root user..."
-cat <<EOL > ~/.my.cnf
-[client]
-user=root
-password=$MYSQL_ROOT_PASSWORD
-EOL
+# Logi funktsioon
+logi() {
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
+}
 
-echo "MySQL installation and configuration completed."
+# Pakettide nimekirja uuendamine ja sõltuvuste paigaldamine
+logi "Uuendatakse pakettide nimekirja ja paigaldatakse sõltuvused..."
+apt update -y
+apt install -y wget lsb-release gnupg
+
+# Laadib alla ja installib MySQL APT konfiguratsioonifaili
+logi "Laaditakse alla MySQL APT konfiguratsioonifail..."
+wget https://dev.mysql.com/get/mysql-apt-config_0.8.30-1_all.deb || { echo "Allalaadimine ebaõnnestus!"; exit 1; }
+
+logi "Installitakse MySQL APT konfiguratsioonifail..."
+dpkg -i mysql-apt-config_0.8.30-1_all.deb || { echo "Konfiguratsioonifaili install ebaõnnestus!"; exit 1; }
+
+# Uuendab repositooriumi nimekirja
+logi "Uuendatakse pakettide nimekirja..."
+apt update || { echo "Paketid ei uuendatud!"; exit 1; }
+
+# Paigaldab MySQL serveri
+logi "Paigaldatakse MySQL server..."
+apt install mysql-server -y || { echo "MySQL serveri paigaldus ebaõnnestus!"; exit 1; }
+
+# Käivita ja aktiveeri MySQL teenus
+logi "Käivitatakse ja lubatakse MySQL automaatne käivitamine..."
+systemctl start mysql || { echo "MySQL käivitamine ebaõnnestus!"; exit 1; }
+systemctl enable mysql || { echo "MySQL automaatse käivitamise lubamine ebaõnnestus!"; exit 1; }
+
+# MySQL esialgne turvaseadistus
+logi "Käivitatakse MySQL turvaskript..."
+mysql_secure_installation
+
+# Puhastamine
+logi "Eemaldatakse allalaaditud konfiguratsioonifail..."
+rm -f mysql-apt-config_0.8.30-1_all.deb
+
+# Lõputeade
+logi "MySQL serveri paigaldus on lõpule viidud ja teenus on käivitatud!"
