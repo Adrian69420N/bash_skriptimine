@@ -1,71 +1,69 @@
 #!/bin/bash
 
-# Kontrollib, kas skript käivitatakse root-õigustega
-if [ "$(id -u)" -ne 0 ]; then
-  echo "Palun käivita see skript root kasutajana."
-  exit 1
-fi
+# Kontrollime, kas vajalikud teenused on paigaldatud ja töötavad
+# Kogume kõik teenused, mida kontrollime, ja paigaldame, kui need puuduvad
+echo "Kontrollin teenuseid..."
+for service in apache2 php mysql-server; do
+    # Kontrollime, kas teenus on paigaldatud
+    if ! dpkg -l | grep -q $service; then
+        # Kui teenus ei ole paigaldatud, paigaldame selle
+        echo "$service ei ole paigaldatud. Paigaldan selle..."
+        sudo apt update && sudo apt install -y $service
+    else
+        # Kui teenus on juba paigaldatud, kuvame teadet
+        echo "$service on juba paigaldatud."
+    fi
+done
 
-# Logi funktsioon
-logi() {
-  echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
-}
+# Kontrollime, kas MySQL server töötab ja käivitame selle, kui ei ole
+sudo systemctl start mysql
+sudo systemctl enable mysql  # Lubame MySQL teenuse automaatse käivitamise
 
-# Kontrollige, kas vajalikud teenused on paigaldatud
-kontrolli_teenus() {
-  if ! dpkg -l | grep -q "$1"; then
-    logi "$1 ei ole paigaldatud, paigaldatakse..."
-    apt install -y "$1" || { echo "$1 paigaldamine ebaõnnestus!"; exit 1; }
-  else
-    logi "$1 on juba paigaldatud."
-  fi
-}
-
-# Veenduge, et Apache, PHP ja MySQL on paigaldatud
-kontrolli_teenus "apache2"
-kontrolli_teenus "php"
-kontrolli_teenus "mysql-server"
-
-# Laadige alla ja paigaldage WordPress
-logi "Laaditakse alla WordPressi..."
-cd /var/www/html
-wget https://wordpress.org/latest.tar.gz || { echo "WordPressi allalaadimine ebaõnnestus!"; exit 1; }
-tar -xvzf latest.tar.gz || { echo "WordPressi failide pakkimine ebaõnnestus!"; exit 1; }
-mv wordpress/* . || { echo "WordPressi failide liigutamine ebaõnnestus!"; exit 1; }
-rm -rf wordpress latest.tar.gz
-
-# Andmebaasi loomine WordPressile
+# Luuakse WordPressi andmebaas ja kasutaja
+echo "Loon andmebaasi ja kasutaja..."
 DB_NAME="wordpress"
-DB_USER="wordpressuser"
-DB_PASS="wordpresspassword"
-DB_HOST="localhost"
+DB_USER="adrian"
+DB_PASSWORD="qwerty"  # Andmebaasi kasutaja parool
 
-logi "Kontrollitakse, kas andmebaas $DB_NAME eksisteerib..."
-mysql -u root -p"{{ mysql_root_password }}" -e "SHOW DATABASES LIKE '$DB_NAME';" | grep "$DB_NAME" || {
-  logi "Andmebaas ei leitud, luuakse..."
-  mysql -u root -p"{{ mysql_root_password }}" -e "CREATE DATABASE $DB_NAME;" || { echo "Andmebaasi loomine ebaõnnestus!"; exit 1; }
-}
+# Loodame MySQL andmebaasi ja kasutaja, kui neid pole olemas
+mysql -u root <<MYSQL_SCRIPT
+CREATE DATABASE IF NOT EXISTS $DB_NAME;  # Loodakse andmebaas, kui see ei ole olemas
+CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';  # Loodakse kasutaja
+GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';  # Andke kasutajale kõik õigused
+FLUSH PRIVILEGES;  # Uuendame MySQL õigusi
+MYSQL_SCRIPT
 
-logi "Loo andmebaasi kasutaja ja andmebaasi õigused..."
-mysql -u root -p"{{ mysql_root_password }}" -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'$DB_HOST' IDENTIFIED BY '$DB_PASS'; FLUSH PRIVILEGES;" || { echo "Andmebaasi kasutaja loomine ebaõnnestus!"; exit 1; }
+# Andmebaasi ja kasutaja loomine õnnestus
+echo "Andmebaas ja kasutaja on loodud."
 
-# WordPressi konfigureerimine
-logi "Kopeeritakse wp-config-sample.php wp-config.php... "
-cp wp-config-sample.php wp-config.php
+# Laadime alla ja pakkime lahti WordPressi
+echo "Laadin alla ja pakkide lahti WordPressi..."
+cd /tmp  # Liigume ajutisse kausta
+wget https://wordpress.org/latest.tar.gz  # Laadime alla WordPressi uusima versiooni
+tar xzvf latest.tar.gz  # Pakkime lahti WordPressi
 
-# Muuda wp-config.php, et seada andmebaasi ühendus
-sed -i "s/database_name_here/$DB_NAME/" wp-config.php
-sed -i "s/username_here/$DB_USER/" wp-config.php
-sed -i "s/password_here/$DB_PASS/" wp-config.php
-sed -i "s/localhost/$DB_HOST/" wp-config.php
+# Paigaldame WordPressi veebiserverisse
+sudo cp -R wordpress /var/www/html/  # Kopeerime WordPressi failid õigesse kausta
 
-# Seadistage Apache õigused WordPressi kaustas
-logi "Seadistatakse õigused WordPressi kataloogis..."
-chown -R www-data:www-data /var/www/html
-chmod -R 755 /var/www/html
+# Seadistame WordPressi konfiguratsioonifaili
+echo "Konfigureerin wp-config.php faili..."
+# Loome konfiguratsioonifaili, asendades vastavad väärtused andmebaasi nime, kasutaja ja parooliga
+sudo cp /var/www/html/wordpress/wp-config-sample.php /var/www/html/wordpress/wp-config.php
+sudo sed -i "s/database_name_here/$DB_NAME/" /var/www/html/wordpress/wp-config.php  # Asendame andmebaasi nime
+sudo sed -i "s/username_here/$DB_USER/" /var/www/html/wordpress/wp-config.php  # Asendame kasutajanime
+sudo sed -i "s/password_here/$DB_PASSWORD/" /var/www/html/wordpress/wp-config.php  # Asendame parooli
 
-# Taaskäivita Apache teenus, et muudatused jõustuksid
-logi "Käivitatakse Apache teenus..."
-systemctl restart apache2 || { echo "Apache teenuse käivitamine ebaõnnestus!"; exit 1; }
+# Seadistame kaustade õigused
+echo "Seadistan kaustade õigused..."
+# Anname veebiserverile vajalikud õigused, et see saaks faile lugeda ja kirjutada
+sudo chown -R www-data:www-data /var/www/html/wordpress  # Kaustade omandiõiguse määramine www-data kasutajale
+sudo chmod -R 755 /var/www/html/wordpress  # Failide õiguste seadistamine
 
-logi "WordPressi paigaldus on lõpetatud ja teenused on käivitatud!"
+# Taaskäivitame Apache serveri
+echo "Taaskäivitan Apache serveri..."
+# Taaskäivitame Apache, et kõik muudatused jõustuksid
+sudo systemctl restart apache2
+
+# Lõpptulemus
+echo "WordPress on paigaldatud ja seadistatud. Kontrollige oma veebilehte brauseris."
+# Informeerime kasutajat, et kõik on valmis ja WordPress on paigaldatud

@@ -1,48 +1,61 @@
 #!/bin/bash
 
 # Kontrollib, kas skript käivitatakse root-õigustega
+# Kontrollime, kas skripti käivitaja on root (ID 0), kui mitte, siis lõpetame skripti
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Palun käivita see skript root kasutajana."
-  exit 1
+  echo "Palun käivita see skript root kasutajana."  # Kuvatakse teade, kui pole root
+  exit 1  # Lõpetame skripti täitmise
 fi
 
 # Logi funktsioon
+# Funktsioon logi, et kuvada ajatemplit ja sõnumit
 logi() {
-  echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"  # Kuvame kuupäeva ja sõnumi
 }
 
 # Pakettide nimekirja uuendamine ja sõltuvuste paigaldamine
 logi "Uuendatakse pakettide nimekirja ja paigaldatakse sõltuvused..."
-apt update -y
+# Värskendame süsteemi pakettnimekirja
+apt update -y  
+# Paigaldame vajalikud tööriistad, nagu wget, lsb-release ja gnupg
 apt install -y wget lsb-release gnupg
 
 # Laadib alla ja installib MySQL APT konfiguratsioonifaili
 logi "Laaditakse alla MySQL APT konfiguratsioonifail..."
-wget https://dev.mysql.com/get/mysql-apt-config_0.8.30-1_all.deb || { echo "Allalaadimine ebaõnnestus!"; exit 1; }
+# Allalaadime MySQL konfiguratsioonifaili
+wget https://dev.mysql.com/get/mysql-apt-config_0.8.30-1_all.deb || { echo "Allalaadimine ebaõnnestus!"; exit 1 }  # Kui allalaadimine ebaõnnestub, lõpetame skripti
 
+# Installime MySQL APT konfiguratsioonifaili
 logi "Installitakse MySQL APT konfiguratsioonifail..."
-dpkg -i mysql-apt-config_0.8.30-1_all.deb || { echo "Konfiguratsioonifaili install ebaõnnestus!"; exit 1; }
+dpkg -i mysql-apt-config_0.8.30-1_all.deb || { echo "Konfiguratsioonifaili install ebaõnnestus!"; exit 1; }  # Kui install ebaõnnestub, lõpetame skripti
 
 # Uuendab repositooriumi nimekirja
 logi "Uuendatakse pakettide nimekirja..."
-apt update || { echo "Paketid ei uuendatud!"; exit 1; }
+# Pärast MySQL repositooriumi lisamist uuendame pakettide nimekirja
+apt update || { echo "Paketid ei uuendatud!"; exit 1; }  # Kui pakettide värskendamine ebaõnnestub, lõpetame skripti
 
 # Paigaldab MySQL serveri
 logi "Paigaldatakse MySQL server..."
-apt install mysql-server -y || { echo "MySQL serveri paigaldus ebaõnnestus!"; exit 1; }
+# Paigaldame MySQL serveri
+apt install mysql-server -y || { echo "MySQL serveri paigaldus ebaõnnestus!"; exit 1; }  # Kui paigaldus ebaõnnestub, lõpetame skripti
 
 # Käivita ja aktiveeri MySQL teenus
 logi "Käivitatakse ja lubatakse MySQL automaatne käivitamine..."
-systemctl start mysql || { echo "MySQL käivitamine ebaõnnestus!"; exit 1; }
-systemctl enable mysql || { echo "MySQL automaatse käivitamise lubamine ebaõnnestus!"; exit 1; }
+# Käivitame MySQL teenuse
+systemctl start mysql || { echo "MySQL käivitamine ebaõnnestus!"; exit 1; }  # Kui teenus ei käivitu, lõpetame skripti
+# Lubame MySQL teenuse automaatse käivitamise süsteemi käivitumisel
+systemctl enable mysql || { echo "MySQL automaatse käivitamise lubamine ebaõnnestus!"; exit 1; }  # Kui automaatne käivitamine ebaõnnestub, lõpetame skripti
 
 # MySQL esialgne turvaseadistus
 logi "Käivitatakse MySQL turvaskript..."
+# Käivitame MySQL esialgse turvaseadistamise skripti, et seadistada root-parool ja eemaldada turvaprobleemid
 mysql_secure_installation
 
 # Puhastamine
 logi "Eemaldatakse allalaaditud konfiguratsioonifail..."
+# Eemaldame allalaaditud konfiguratsioonifaili, et hoida süsteem puhas
 rm -f mysql-apt-config_0.8.30-1_all.deb
 
 # Lõputeade
 logi "MySQL serveri paigaldus on lõpule viidud ja teenus on käivitatud!"
+# Lõpetame skripti, teavitades, et paigaldus on lõppenud
